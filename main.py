@@ -1,390 +1,210 @@
-from abc import ABC, abstractmethod
-import random
-import pygame
-import time
-from typing import List, Tuple, Dict, Optional, Type
+# Импортируем необходимые модули
+import pygame  # библиотека для работы с графикой и звуком
+import random  # для случайного выбора фигур
 
+# Инициализируем Pygame
+pygame.init()
 
-class Position:
-    def __init__(self, row: int, col: int):
-        self.row = row
-        self.col = col
+# Устанавливаем размеры игрового окна
+WINDOW_WIDTH = 300  # ширина окна в пикселях
+WINDOW_HEIGHT = 600  # высота окна в пикселях
+BLOCK_SIZE = 30  # размер одного блока фигурки в пикселях
 
-    def __eq__(self, other):
-        return self.row == other.row and self.col == other.col
+# Устанавливаем размеры игрового поля в блоках
+COLUMNS = WINDOW_WIDTH // BLOCK_SIZE  # количество столбцов
+ROWS = WINDOW_HEIGHT // BLOCK_SIZE  # количество строк
 
+# Задаём цвета RGB (красный, зелёный, синий)
+BLACK = (0, 0, 0)        # чёрный цвет
+WHITE = (255, 255, 255)  # белый цвет
+GRAY = (128, 128, 128)   # серый цвет
+RED = (255, 0, 0)        # красный для фигурок
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+CYAN = (0, 255, 255)
+MAGENTA = (255, 0, 255)
+YELLOW = (255, 255, 0)
+ORANGE = (255, 165, 0)
 
-class Block:
-    def __init__(self, color: Tuple[int, int, int]):
-        self.color = color
+# Список возможных цветов фигур
+colors = [CYAN, BLUE, ORANGE, YELLOW, GREEN, MAGENTA, RED]
 
+# Определяем все возможные формы фигур и их повороты
+SHAPES = [
+    [[1, 1, 1, 1]],  # I
 
-class GameGrid:
-    def __init__(self, rows: int, cols: int):
-        self.rows = rows
-        self.cols = cols
-        self.cells = [[None for _ in range(cols)] for _ in range(rows)]
+    [[1, 1],
+     [1, 1]],        # O
 
-    def is_valid_position(self, position: Position) -> bool:
-        return 0 <= position.row < self.rows and 0 <= position.col < self.cols
+    [[0, 1, 0],
+     [1, 1, 1]],     # T
 
-    def is_cell_empty(self, position: Position) -> bool:
-        return self.is_valid_position(position) and self.cells[position.row][position.col] is None
+    [[1, 0, 0],
+     [1, 1, 1]],     # J
 
-    def place_block(self, position: Position, block: Block):
-        if self.is_valid_position(position):
-            self.cells[position.row][position.col] = block
+    [[0, 0, 1],
+     [1, 1, 1]],     # L
 
-    def clear_lines(self) -> int:
-        lines_cleared = 0
-        row = self.rows - 1
-        while row >= 0:
-            if all(self.cells[row]):
-                lines_cleared += 1
-                for r in range(row, 0, -1):
-                    self.cells[r] = self.cells[r - 1][:]
-                self.cells[0] = [None] * self.cols
-            else:
-                row -= 1
-        return lines_cleared
+    [[0, 1, 1],
+     [1, 1, 0]],     # S
 
+    [[1, 1, 0],
+     [0, 1, 1]]      # Z
+]
 
-class Tetromino(ABC):
-    def __init__(self, start_row: int, start_col: int):
-        self.positions: List[Position] = []
-        self.pivot = Position(start_row, start_col)
-        self._color: Tuple[int, int, int] = (0, 0, 0)
-        self.initialize_positions()
+# Функция для создания новой случайной фигурки
+def get_new_piece():
+    shape = random.choice(SHAPES)  # случайная форма
+    color = random.choice(colors)  # случайный цвет
+    x = COLUMNS // 2 - len(shape[0]) // 2  # центрируем по горизонтали
+    y = 0  # старт сверху
+    return {'shape': shape, 'color': color, 'x': x, 'y': y}
 
-    @property
-    def color(self) -> Tuple[int, int, int]:
-        return self._color
+# Функция для создания пустого игрового поля
+def create_grid():
+    return [[BLACK for _ in range(COLUMNS)] for _ in range(ROWS)]
 
-    @abstractmethod
-    def initialize_positions(self):
-        pass
+# Функция для отрисовки игрового поля, фигур и сетки
+def draw_window(surface, grid, score, paused):
+    surface.fill(BLACK)  # заливаем фон чёрным
 
-    def rotate(self):
-        new_positions = []
-        for pos in self.positions:
-            row_offset = pos.row - self.pivot.row
-            col_offset = pos.col - self.pivot.col
-            new_row = self.pivot.row - col_offset
-            new_col = self.pivot.col + row_offset
-            new_positions.append(Position(int(new_row), int(new_col)))
-        self.positions = new_positions
+    # Рисуем каждый блок на игровом поле
+    for y in range(ROWS):
+        for x in range(COLUMNS):
+            pygame.draw.rect(surface, grid[y][x],
+                             (x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
 
-    def move(self, row_offset: int, col_offset: int):
-        self.pivot.row += row_offset
-        self.pivot.col += col_offset
-        for pos in self.positions:
-            pos.row += row_offset
-            pos.col += col_offset
+    # Рисуем сетку поверх блоков
+    for x in range(COLUMNS):
+        pygame.draw.line(surface, GRAY, (x * BLOCK_SIZE, 0), (x * BLOCK_SIZE, WINDOW_HEIGHT))
+    for y in range(ROWS):
+        pygame.draw.line(surface, GRAY, (0, y * BLOCK_SIZE), (WINDOW_WIDTH, y * BLOCK_SIZE))
 
+    # Отображаем счёт
+    font = pygame.font.SysFont('arial', 24)
+    score_text = font.render(f'Очки: {score}', True, WHITE)
+    surface.blit(score_text, (10, 10))
 
-class ITetromino(Tetromino):
-    def __init__(self, start_row: int, start_col: int):
-        self._color = (0, 255, 255)  # Cyan
-        super().__init__(start_row, start_col)
+    # Если игра на паузе — выводим сообщение
+    if paused:
+        pause_text = font.render('Пауза', True, YELLOW)
+        surface.blit(pause_text, (WINDOW_WIDTH // 2 - 40, WINDOW_HEIGHT // 2 - 20))
 
-    def initialize_positions(self):
-        self.positions = [
-            Position(self.pivot.row, self.pivot.col - 2),
-            Position(self.pivot.row, self.pivot.col - 1),
-            Position(self.pivot.row, self.pivot.col),
-            Position(self.pivot.row, self.pivot.col + 1)
-        ]
+    pygame.display.update()  # обновляем экран
 
+# Функция для отображения текущей фигурки
+def draw_piece(surface, piece):
+    shape = piece['shape']
+    color = piece['color']
+    for y, row in enumerate(shape):
+        for x, cell in enumerate(row):
+            if cell:
+                pygame.draw.rect(surface, color,
+                                 ((piece['x'] + x) * BLOCK_SIZE, (piece['y'] + y) * BLOCK_SIZE,
+                                  BLOCK_SIZE, BLOCK_SIZE), 0)
 
-class OTetromino(Tetromino):
-    def __init__(self, start_row: int, start_col: int):
-        self._color = (255, 255, 0)  # Yellow
-        super().__init__(start_row, start_col)
+# Проверка, можно ли разместить фигурку на позиции
+def valid_space(piece, grid):
+    shape = piece['shape']
+    for y, row in enumerate(shape):
+        for x, cell in enumerate(row):
+            if cell:
+                new_x = piece['x'] + x
+                new_y = piece['y'] + y
+                if new_x < 0 or new_x >= COLUMNS or new_y >= ROWS:
+                    return False
+                if new_y >= 0 and grid[new_y][new_x] != BLACK:
+                    return False
+    return True
 
-    def initialize_positions(self):
-        self.positions = [
-            Position(self.pivot.row, self.pivot.col),
-            Position(self.pivot.row, self.pivot.col + 1),
-            Position(self.pivot.row + 1, self.pivot.col),
-            Position(self.pivot.row + 1, self.pivot.col + 1)
-        ]
+# Закрепляем упавшую фигурку на поле
+def lock_piece(grid, piece):
+    shape = piece['shape']
+    color = piece['color']
+    for y, row in enumerate(shape):
+        for x, cell in enumerate(row):
+            if cell:
+                grid[piece['y'] + y][piece['x'] + x] = color
 
-    def rotate(self):
-        pass  # Квадрат не вращается
+# Проверяем заполненные линии и убираем их
+def clear_lines(grid):
+    lines_cleared = 0
+    for i in range(ROWS - 1, -1, -1):
+        if BLACK not in grid[i]:
+            del grid[i]  # удаляем заполненную строку
+            grid.insert(0, [BLACK for _ in range(COLUMNS)])  # добавляем пустую сверху
+            lines_cleared += 1
+    return lines_cleared
 
+# Основная функция игры
+def main():
+    win = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))  # создаём окно
+    pygame.display.set_caption("Тетрис от Natali")  # заголовок окна
 
-class TTetromino(Tetromino):
-    def __init__(self, start_row: int, start_col: int):
-        self._color = (128, 0, 128)  # Purple
-        super().__init__(start_row, start_col)
+    clock = pygame.time.Clock()  # для управления FPS
+    grid = create_grid()  # создаём игровое поле
+    current_piece = get_new_piece()  # текущая фигурка
+    fall_time = 0  # время падения
+    fall_speed = 0.5  # скорость падения фигур (секунд)
+    score = 0  # начальный счёт
+    paused = False  # флаг паузы
 
-    def initialize_positions(self):
-        self.positions = [
-            Position(self.pivot.row, self.pivot.col - 1),
-            Position(self.pivot.row, self.pivot.col),
-            Position(self.pivot.row, self.pivot.col + 1),
-            Position(self.pivot.row + 1, self.pivot.col)
-        ]
+    running = True
+    while running:
+        fall_time += clock.get_rawtime() / 1000  # сколько времени прошло с прошлого кадра
+        clock.tick(60)  # ограничиваем FPS
 
+        # Обработка событий клавиатуры и выхода
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
 
-class STetromino(Tetromino):
-    def __init__(self, start_row: int, start_col: int):
-        self._color = (0, 255, 0)  # Green
-        super().__init__(start_row, start_col)
-
-    def initialize_positions(self):
-        self.positions = [
-            Position(self.pivot.row, self.pivot.col),
-            Position(self.pivot.row, self.pivot.col + 1),
-            Position(self.pivot.row + 1, self.pivot.col - 1),
-            Position(self.pivot.row + 1, self.pivot.col)
-        ]
-
-
-class ZTetromino(Tetromino):
-    def __init__(self, start_row: int, start_col: int):
-        self._color = (255, 0, 0)  # Red
-        super().__init__(start_row, start_col)
-
-    def initialize_positions(self):
-        self.positions = [
-            Position(self.pivot.row, self.pivot.col - 1),
-            Position(self.pivot.row, self.pivot.col),
-            Position(self.pivot.row + 1, self.pivot.col),
-            Position(self.pivot.row + 1, self.pivot.col + 1)
-        ]
-
-
-class JTetromino(Tetromino):
-    def __init__(self, start_row: int, start_col: int):
-        self._color = (0, 0, 255)  # Blue
-        super().__init__(start_row, start_col)
-
-    def initialize_positions(self):
-        self.positions = [
-            Position(self.pivot.row, self.pivot.col - 1),
-            Position(self.pivot.row, self.pivot.col),
-            Position(self.pivot.row, self.pivot.col + 1),
-            Position(self.pivot.row + 1, self.pivot.col + 1)
-        ]
-
-
-class LTetromino(Tetromino):
-    def __init__(self, start_row: int, start_col: int):
-        self._color = (255, 165, 0)  # Orange
-        super().__init__(start_row, start_col)
-
-    def initialize_positions(self):
-        self.positions = [
-            Position(self.pivot.row, self.pivot.col - 1),
-            Position(self.pivot.row, self.pivot.col),
-            Position(self.pivot.row, self.pivot.col + 1),
-            Position(self.pivot.row + 1, self.pivot.col - 1)
-        ]
-
-
-class TetrominoFactory:
-    @staticmethod
-    def create_random(start_row: int, start_col: int) -> Tetromino:
-        tetrominoes: List[Type[Tetromino]] = [
-            ITetromino, OTetromino, TTetromino,
-            STetromino, ZTetromino, JTetromino, LTetromino
-        ]
-        return random.choice(tetrominoes)(start_row, start_col)
-
-
-class Renderer(ABC):
-    @abstractmethod
-    def render(self, grid: GameGrid, current_piece: Tetromino):
-        pass
-
-
-class PyGameRenderer(Renderer):
-    def __init__(self, grid_rows: int, grid_cols: int, block_size: int, colors: Dict[str, Tuple[int, int, int]]):
-        self.block_size = block_size
-        self.colors = colors
-        pygame.init()
-        self.screen = pygame.display.set_mode((
-            grid_cols * block_size,
-            grid_rows * block_size
-        ))
-        pygame.display.set_caption("Tetris")
-
-    def render(self, grid: GameGrid, current_piece: Tetromino):
-        self.screen.fill(self.colors['background'])
-
-        # Отрисовка сетки
-        for row in range(grid.rows):
-            for col in range(grid.cols):
-                rect = pygame.Rect(
-                    col * self.block_size,
-                    row * self.block_size,
-                    self.block_size,
-                    self.block_size
-                )
-                pygame.draw.rect(self.screen, self.colors['grid'], rect, 1)
-
-                cell = grid.cells[row][col]
-                if cell is not None:
-                    pygame.draw.rect(
-                        self.screen,
-                        cell.color,
-                        pygame.Rect(
-                            col * self.block_size + 1,
-                            row * self.block_size + 1,
-                            self.block_size - 2,
-                            self.block_size - 2
-                        )
-                    )
-
-        # Отрисовка текущей фигуры с проверкой на None
-        if current_piece is not None:  # Защита от возможного None
-            for pos in current_piece.positions:
-                if 0 <= pos.row < grid.rows and 0 <= pos.col < grid.cols:
-                    pygame.draw.rect(
-                        self.screen,
-                        current_piece.color,
-                        pygame.Rect(
-                            pos.col * self.block_size + 1,
-                            pos.row * self.block_size + 1,
-                            self.block_size - 2,
-                            self.block_size - 2
-                        )
-                    )
-
-        pygame.display.flip()
-
-
-class TetrisGame:
-    def __init__(
-            self,
-            grid: GameGrid,
-            renderer: Renderer,
-            piece_factory: TetrominoFactory
-    ):
-        self.grid = grid
-        self.renderer = renderer
-        self.piece_factory = piece_factory
-        self.current_piece: Optional[Tetromino] = None
-        self.game_over = False
-        self.score = 0
-        self.fall_speed = 0.5  # seconds per row
-        self.last_move_down = time.time()
-
-    def start(self):
-        self._spawn_new_piece()
-        clock = pygame.time.Clock()
-
-        while not self.game_over:
-            current_time = time.time()
-
-            # Обработка событий
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.game_over = True
-                elif event.type == pygame.KEYDOWN:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_p:  # пауза
+                    paused = not paused
+                if not paused:
                     if event.key == pygame.K_LEFT:
-                        self._try_move_piece(0, -1)
-                    elif event.key == pygame.K_RIGHT:
-                        self._try_move_piece(0, 1)
-                    elif event.key == pygame.K_UP:
-                        self._rotate_piece()
-                    elif event.key == pygame.K_DOWN:
-                        self._try_move_piece(1, 0)
-                    elif event.key == pygame.K_SPACE:
-                        self._hard_drop()
+                        current_piece['x'] -= 1
+                        if not valid_space(current_piece, grid):
+                            current_piece['x'] += 1
+                    if event.key == pygame.K_RIGHT:
+                        current_piece['x'] += 1
+                        if not valid_space(current_piece, grid):
+                            current_piece['x'] -= 1
+                    if event.key == pygame.K_DOWN:
+                        current_piece['y'] += 1
+                        if not valid_space(current_piece, grid):
+                            current_piece['y'] -= 1
+                    if event.key == pygame.K_UP:
+                        # Поворот фигурки
+                        rotated_shape = list(zip(*current_piece['shape'][::-1]))
+                        old_shape = current_piece['shape']
+                        current_piece['shape'] = rotated_shape
+                        if not valid_space(current_piece, grid):
+                            current_piece['shape'] = old_shape
 
-            # Автоматическое движение вниз
-            if current_time - self.last_move_down > self.fall_speed:
-                self._update()
-                self.last_move_down = current_time
+        if not paused:
+            # Двигаем фигурку вниз с заданной скоростью
+            if fall_time > fall_speed:
+                fall_time = 0
+                current_piece['y'] += 1
+                if not valid_space(current_piece, grid):
+                    current_piece['y'] -= 1
+                    lock_piece(grid, current_piece)
+                    lines = clear_lines(grid)
+                    score += lines * 100  # начисляем очки
+                    current_piece = get_new_piece()
+                    if not valid_space(current_piece, grid):
+                        print("Игра окончена!")
+                        running = False
 
-            self.renderer.render(self.grid, self.current_piece)
-            clock.tick(60)
+        # Отрисовка окна, фигурки и поля
+        draw_window(win, grid, score, paused)
+        draw_piece(win, current_piece)
+        pygame.display.update()
 
-        pygame.quit()
+    pygame.quit()
 
-    def _spawn_new_piece(self):
-        start_row = 0
-        start_col = self.grid.cols // 2 - 1
-        self.current_piece = self.piece_factory.create_random(start_row, start_col)
-
-        # Проверка коллизий при появлении
-        if self._has_collision():
-            self.game_over = True
-
-    def _rotate_piece(self):
-        original_positions = [Position(pos.row, pos.col) for pos in self.current_piece.positions]
-        original_pivot = Position(self.current_piece.pivot.row, self.current_piece.pivot.col)
-
-        self.current_piece.rotate()
-
-        if self._has_collision():
-            self.current_piece.positions = original_positions
-            self.current_piece.pivot = original_pivot
-
-    def _hard_drop(self):
-        while self._try_move_piece(1, 0):
-            pass
-
-    def _update(self):
-        if not self._try_move_piece(1, 0):
-            self._lock_piece()
-            lines = self.grid.clear_lines()
-            self._update_score(lines)
-            self._spawn_new_piece()
-
-    def _try_move_piece(self, row_delta: int, col_delta: int) -> bool:
-        original_positions = [Position(pos.row, pos.col) for pos in self.current_piece.positions]
-        original_pivot = Position(self.current_piece.pivot.row, self.current_piece.pivot.col)
-
-        self.current_piece.move(row_delta, col_delta)
-
-        if self._has_collision():
-            self.current_piece.positions = original_positions
-            self.current_piece.pivot = original_pivot
-            return False
-        return True
-
-    def _has_collision(self) -> bool:
-        for pos in self.current_piece.positions:
-            if not self.grid.is_valid_position(pos) or not self.grid.is_cell_empty(pos):
-                return True
-        return False
-
-    def _lock_piece(self):
-        for pos in self.current_piece.positions:
-            if self.grid.is_valid_position(pos):
-                self.grid.place_block(pos, Block(self.current_piece.color))
-
-    def _update_score(self, lines_cleared: int):
-        self.score += {0: 0, 1: 100, 2: 300, 3: 500, 4: 800}.get(lines_cleared, 0)
-        # Увеличиваем скорость с ростом счета
-        self.fall_speed = max(0.05, 0.5 - self.score * 0.0001)
-
-
+# Запуск игры
 if __name__ == "__main__":
-    # Конфигурация
-    GRID_ROWS = 20
-    GRID_COLS = 10
-    BLOCK_SIZE = 30
-    COLOR_SCHEME = {
-        'background': (0, 0, 0),
-        'grid': (50, 50, 50),
-        'I': (0, 255, 255),  # Cyan
-        'O': (255, 255, 0),  # Yellow
-        'T': (128, 0, 128),  # Purple
-        'S': (0, 255, 0),  # Green
-        'Z': (255, 0, 0),  # Red
-        'J': (0, 0, 255),  # Blue
-        'L': (255, 165, 0),  # Orange
-    }
-
-    # Инициализация компонентов
-    game_grid = GameGrid(GRID_ROWS, GRID_COLS)
-    game_renderer = PyGameRenderer(GRID_ROWS, GRID_COLS, BLOCK_SIZE, COLOR_SCHEME)
-    tetromino_factory = TetrominoFactory()
-
-    # Запуск игры
-    tetris_game = TetrisGame(game_grid, game_renderer, tetromino_factory)
-    tetris_game.start()
+    main()

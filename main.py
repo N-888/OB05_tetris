@@ -237,19 +237,20 @@ class PyGameRenderer(Renderer):
                         )
                     )
 
-        # Отрисовка текущей фигуры
-        for pos in current_piece.positions:
-            if 0 <= pos.row < grid.rows and 0 <= pos.col < grid.cols:
-                pygame.draw.rect(
-                    self.screen,
-                    current_piece.color,
-                    pygame.Rect(
-                        pos.col * self.block_size + 1,
-                        pos.row * self.block_size + 1,
-                        self.block_size - 2,
-                        self.block_size - 2
+        # Отрисовка текущей фигуры с проверкой на None
+        if current_piece is not None:  # Защита от возможного None
+            for pos in current_piece.positions:
+                if 0 <= pos.row < grid.rows and 0 <= pos.col < grid.cols:
+                    pygame.draw.rect(
+                        self.screen,
+                        current_piece.color,
+                        pygame.Rect(
+                            pos.col * self.block_size + 1,
+                            pos.row * self.block_size + 1,
+                            self.block_size - 2,
+                            self.block_size - 2
+                        )
                     )
-                )
 
         pygame.display.flip()
 

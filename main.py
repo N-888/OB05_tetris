@@ -5,10 +5,6 @@ import time
 from typing import List, Tuple, Dict, Optional, Type
 
 
-# --------------------------------------------
-# Исправленные классы
-# --------------------------------------------
-
 class Position:
     def __init__(self, row: int, col: int):
         self.row = row
@@ -23,42 +19,46 @@ class Block:
         self.color = color
 
 
-class Grid:
+class GameGrid:
     def __init__(self, rows: int, cols: int):
         self.rows = rows
         self.cols = cols
-        self.grid = [[None for _ in range(cols)] for _ in range(rows)]
+        self.cells = [[None for _ in range(cols)] for _ in range(rows)]
 
     def is_valid_position(self, position: Position) -> bool:
         return 0 <= position.row < self.rows and 0 <= position.col < self.cols
 
     def is_cell_empty(self, position: Position) -> bool:
-        return self.is_valid_position(position) and self.grid[position.row][position.col] is None
+        return self.is_valid_position(position) and self.cells[position.row][position.col] is None
 
     def place_block(self, position: Position, block: Block):
         if self.is_valid_position(position):
-            self.grid[position.row][position.col] = block
+            self.cells[position.row][position.col] = block
 
     def clear_lines(self) -> int:
         lines_cleared = 0
         row = self.rows - 1
         while row >= 0:
-            if all(self.grid[row]):
+            if all(self.cells[row]):
                 lines_cleared += 1
                 for r in range(row, 0, -1):
-                    self.grid[r] = self.grid[r - 1][:]
-                self.grid[0] = [None] * self.cols
+                    self.cells[r] = self.cells[r - 1][:]
+                self.cells[0] = [None] * self.cols
             else:
                 row -= 1
         return lines_cleared
 
 
 class Tetromino(ABC):
-    def __init__(self):
-        self.blocks: List[Block] = []
+    def __init__(self, start_row: int, start_col: int):
         self.positions: List[Position] = []
-        self.pivot = Position(0, 0)
-        self.color: Tuple[int, int, int]
+        self.pivot = Position(start_row, start_col)
+        self._color: Tuple[int, int, int] = (0, 0, 0)
+        self.initialize_positions()
+
+    @property
+    def color(self) -> Tuple[int, int, int]:
+        return self._color
 
     @abstractmethod
     def initialize_positions(self):
@@ -71,7 +71,7 @@ class Tetromino(ABC):
             col_offset = pos.col - self.pivot.col
             new_row = self.pivot.row - col_offset
             new_col = self.pivot.col + row_offset
-            new_positions.append(Position(round(new_row), round(new_col)))
+            new_positions.append(Position(int(new_row), int(new_col)))
         self.positions = new_positions
 
     def move(self, row_offset: int, col_offset: int):
@@ -82,51 +82,120 @@ class Tetromino(ABC):
             pos.col += col_offset
 
 
-class I_Tetromino(Tetromino):
+class ITetromino(Tetromino):
     def __init__(self, start_row: int, start_col: int):
-        super().__init__()
-        self.color = (0, 255, 255)
-        self.pivot = Position(start_row, start_col + 1.5)
-        self.initialize_positions()
+        self._color = (0, 255, 255)  # Cyan
+        super().__init__(start_row, start_col)
 
     def initialize_positions(self):
         self.positions = [
-            Position(self.pivot.row, round(self.pivot.col - 1.5)),
-            Position(self.pivot.row, round(self.pivot.col - 0.5)),
-            Position(self.pivot.row, round(self.pivot.col + 0.5)),
-            Position(self.pivot.row, round(self.pivot.col + 1.5))
+            Position(self.pivot.row, self.pivot.col - 2),
+            Position(self.pivot.row, self.pivot.col - 1),
+            Position(self.pivot.row, self.pivot.col),
+            Position(self.pivot.row, self.pivot.col + 1)
         ]
 
 
-class O_Tetromino(Tetromino):
+class OTetromino(Tetromino):
     def __init__(self, start_row: int, start_col: int):
-        super().__init__()
-        self.color = (255, 255, 0)
-        self.pivot = Position(start_row + 0.5, start_col + 0.5)
-        self.initialize_positions()
+        self._color = (255, 255, 0)  # Yellow
+        super().__init__(start_row, start_col)
 
     def initialize_positions(self):
         self.positions = [
-            Position(self.pivot.row - 0.5, self.pivot.col - 0.5),
-            Position(self.pivot.row - 0.5, self.pivot.col + 0.5),
-            Position(self.pivot.row + 0.5, self.pivot.col - 0.5),
-            Position(self.pivot.row + 0.5, self.pivot.col + 0.5)
+            Position(self.pivot.row, self.pivot.col),
+            Position(self.pivot.row, self.pivot.col + 1),
+            Position(self.pivot.row + 1, self.pivot.col),
+            Position(self.pivot.row + 1, self.pivot.col + 1)
         ]
 
     def rotate(self):
-        pass
+        pass  # Квадрат не вращается
+
+
+class TTetromino(Tetromino):
+    def __init__(self, start_row: int, start_col: int):
+        self._color = (128, 0, 128)  # Purple
+        super().__init__(start_row, start_col)
+
+    def initialize_positions(self):
+        self.positions = [
+            Position(self.pivot.row, self.pivot.col - 1),
+            Position(self.pivot.row, self.pivot.col),
+            Position(self.pivot.row, self.pivot.col + 1),
+            Position(self.pivot.row + 1, self.pivot.col)
+        ]
+
+
+class STetromino(Tetromino):
+    def __init__(self, start_row: int, start_col: int):
+        self._color = (0, 255, 0)  # Green
+        super().__init__(start_row, start_col)
+
+    def initialize_positions(self):
+        self.positions = [
+            Position(self.pivot.row, self.pivot.col),
+            Position(self.pivot.row, self.pivot.col + 1),
+            Position(self.pivot.row + 1, self.pivot.col - 1),
+            Position(self.pivot.row + 1, self.pivot.col)
+        ]
+
+
+class ZTetromino(Tetromino):
+    def __init__(self, start_row: int, start_col: int):
+        self._color = (255, 0, 0)  # Red
+        super().__init__(start_row, start_col)
+
+    def initialize_positions(self):
+        self.positions = [
+            Position(self.pivot.row, self.pivot.col - 1),
+            Position(self.pivot.row, self.pivot.col),
+            Position(self.pivot.row + 1, self.pivot.col),
+            Position(self.pivot.row + 1, self.pivot.col + 1)
+        ]
+
+
+class JTetromino(Tetromino):
+    def __init__(self, start_row: int, start_col: int):
+        self._color = (0, 0, 255)  # Blue
+        super().__init__(start_row, start_col)
+
+    def initialize_positions(self):
+        self.positions = [
+            Position(self.pivot.row, self.pivot.col - 1),
+            Position(self.pivot.row, self.pivot.col),
+            Position(self.pivot.row, self.pivot.col + 1),
+            Position(self.pivot.row + 1, self.pivot.col + 1)
+        ]
+
+
+class LTetromino(Tetromino):
+    def __init__(self, start_row: int, start_col: int):
+        self._color = (255, 165, 0)  # Orange
+        super().__init__(start_row, start_col)
+
+    def initialize_positions(self):
+        self.positions = [
+            Position(self.pivot.row, self.pivot.col - 1),
+            Position(self.pivot.row, self.pivot.col),
+            Position(self.pivot.row, self.pivot.col + 1),
+            Position(self.pivot.row + 1, self.pivot.col - 1)
+        ]
 
 
 class TetrominoFactory:
     @staticmethod
     def create_random(start_row: int, start_col: int) -> Tetromino:
-        tetrominoes: List[Type[Tetromino]] = [I_Tetromino, O_Tetromino]
+        tetrominoes: List[Type[Tetromino]] = [
+            ITetromino, OTetromino, TTetromino,
+            STetromino, ZTetromino, JTetromino, LTetromino
+        ]
         return random.choice(tetrominoes)(start_row, start_col)
 
 
 class Renderer(ABC):
     @abstractmethod
-    def render(self, grid: Grid, current_piece: Tetromino):
+    def render(self, grid: GameGrid, current_piece: Tetromino):
         pass
 
 
@@ -141,7 +210,7 @@ class PyGameRenderer(Renderer):
         ))
         pygame.display.set_caption("Tetris")
 
-    def render(self, grid: Grid, current_piece: Tetromino):
+    def render(self, grid: GameGrid, current_piece: Tetromino):
         self.screen.fill(self.colors['background'])
 
         # Отрисовка сетки
@@ -155,10 +224,11 @@ class PyGameRenderer(Renderer):
                 )
                 pygame.draw.rect(self.screen, self.colors['grid'], rect, 1)
 
-                if grid.grid[row][col]:
+                cell = grid.cells[row][col]
+                if cell is not None:
                     pygame.draw.rect(
                         self.screen,
-                        grid.grid[row][col].color,
+                        cell.color,
                         pygame.Rect(
                             col * self.block_size + 1,
                             row * self.block_size + 1,
@@ -184,10 +254,10 @@ class PyGameRenderer(Renderer):
         pygame.display.flip()
 
 
-class Game:
+class TetrisGame:
     def __init__(
             self,
-            grid: Grid,
+            grid: GameGrid,
             renderer: Renderer,
             piece_factory: TetrominoFactory
     ):
@@ -197,11 +267,12 @@ class Game:
         self.current_piece: Optional[Tetromino] = None
         self.game_over = False
         self.score = 0
+        self.fall_speed = 0.5  # seconds per row
+        self.last_move_down = time.time()
 
     def start(self):
         self._spawn_new_piece()
         clock = pygame.time.Clock()
-        last_move_down = time.time()
 
         while not self.game_over:
             current_time = time.time()
@@ -219,18 +290,22 @@ class Game:
                         self._rotate_piece()
                     elif event.key == pygame.K_DOWN:
                         self._try_move_piece(1, 0)
+                    elif event.key == pygame.K_SPACE:
+                        self._hard_drop()
 
             # Автоматическое движение вниз
-            if current_time - last_move_down > 0.5:
+            if current_time - self.last_move_down > self.fall_speed:
                 self._update()
-                last_move_down = current_time
+                self.last_move_down = current_time
 
             self.renderer.render(self.grid, self.current_piece)
             clock.tick(60)
 
+        pygame.quit()
+
     def _spawn_new_piece(self):
         start_row = 0
-        start_col = self.grid.cols // 2
+        start_col = self.grid.cols // 2 - 1
         self.current_piece = self.piece_factory.create_random(start_row, start_col)
 
         # Проверка коллизий при появлении
@@ -238,7 +313,7 @@ class Game:
             self.game_over = True
 
     def _rotate_piece(self):
-        original_positions = self.current_piece.positions.copy()
+        original_positions = [Position(pos.row, pos.col) for pos in self.current_piece.positions]
         original_pivot = Position(self.current_piece.pivot.row, self.current_piece.pivot.col)
 
         self.current_piece.rotate()
@@ -246,6 +321,10 @@ class Game:
         if self._has_collision():
             self.current_piece.positions = original_positions
             self.current_piece.pivot = original_pivot
+
+    def _hard_drop(self):
+        while self._try_move_piece(1, 0):
+            pass
 
     def _update(self):
         if not self._try_move_piece(1, 0):
@@ -279,29 +358,32 @@ class Game:
 
     def _update_score(self, lines_cleared: int):
         self.score += {0: 0, 1: 100, 2: 300, 3: 500, 4: 800}.get(lines_cleared, 0)
+        # Увеличиваем скорость с ростом счета
+        self.fall_speed = max(0.05, 0.5 - self.score * 0.0001)
 
-
-# --------------------------------------------
-# Запуск игры
-# --------------------------------------------
 
 if __name__ == "__main__":
     # Конфигурация
     GRID_ROWS = 20
     GRID_COLS = 10
     BLOCK_SIZE = 30
-    COLORS = {
+    COLOR_SCHEME = {
         'background': (0, 0, 0),
         'grid': (50, 50, 50),
-        'I': (0, 255, 255),
-        'O': (255, 255, 0),
+        'I': (0, 255, 255),  # Cyan
+        'O': (255, 255, 0),  # Yellow
+        'T': (128, 0, 128),  # Purple
+        'S': (0, 255, 0),  # Green
+        'Z': (255, 0, 0),  # Red
+        'J': (0, 0, 255),  # Blue
+        'L': (255, 165, 0),  # Orange
     }
 
     # Инициализация компонентов
-    grid = Grid(GRID_ROWS, GRID_COLS)
-    renderer = PyGameRenderer(GRID_ROWS, GRID_COLS, BLOCK_SIZE, COLORS)
-    factory = TetrominoFactory()
+    game_grid = GameGrid(GRID_ROWS, GRID_COLS)
+    game_renderer = PyGameRenderer(GRID_ROWS, GRID_COLS, BLOCK_SIZE, COLOR_SCHEME)
+    tetromino_factory = TetrominoFactory()
 
     # Запуск игры
-    game = Game(grid, renderer, factory)
-    game.start()
+    tetris_game = TetrisGame(game_grid, game_renderer, tetromino_factory)
+    tetris_game.start()
